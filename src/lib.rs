@@ -16,7 +16,7 @@ pub struct Server {
 }
 
 impl Server {
-    /// Creates a new Server using an ip address and port
+    /// Creates a new tcp listener and a workers pool, using an ip address and port
     /// 
     pub fn new(ip_address_port: &str, workers_pool_size: usize) -> Result<Self, Box<dyn Error>>  {
         let listener = TcpListener::bind(ip_address_port)?;
@@ -27,7 +27,7 @@ impl Server {
         })
     }
 
-    /// Server starts serving clients
+    /// Workers pool starts serving clients
     /// 
     pub fn start(&self) -> Result<(), Box<dyn Error>> {
         for stream in self.listener.incoming() {
@@ -78,15 +78,25 @@ pub struct ThreadPool {
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 #[derive(Debug)]
-pub struct PoolCreationError;
+pub struct PoolCreationError {
+    msg: String,
+}
 
-impl fmt::Display for PoolCreationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Number of workers in pool must be greater than 0.")
+impl PoolCreationError {
+    fn new(msg: &str) -> Self {
+        PoolCreationError { 
+            msg: msg.to_string(),
+        }
     }
 }
 
-impl Error for PoolCreationError {}
+impl fmt::Display for PoolCreationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl Error for PoolCreationError {} // PoolCreationError is of type Error. No need to override existing Error methods
 
 impl ThreadPool {
     /// Create a new ThreadPool.
@@ -98,7 +108,7 @@ impl ThreadPool {
     /// The `new` function will panic if the size is zero.
     pub fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
         if size <= 0 {
-            return Err(PoolCreationError);
+            return Err(PoolCreationError::new("Number of workers in pool must be greater than 0."));
         }
 
         let (sender, receiver) = mpsc::channel();

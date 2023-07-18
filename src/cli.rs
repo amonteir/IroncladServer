@@ -96,7 +96,9 @@ impl Config {
             match cli_input[index].to_lowercase().as_str() {
                 "-ip" => {
                     // server ip
-                    if let std::collections::hash_map::Entry::Vacant(e) = args_opts_map.entry(ServerConfigArguments::IpAddress) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        args_opts_map.entry(ServerConfigArguments::IpAddress)
+                    {
                         e.insert(cli_input[index + 1].clone());
                         index += 1;
                     } else {
@@ -107,7 +109,9 @@ impl Config {
                 }
                 "-p" => {
                     // server port
-                    if let std::collections::hash_map::Entry::Vacant(e) = args_opts_map.entry(ServerConfigArguments::Port) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        args_opts_map.entry(ServerConfigArguments::Port)
+                    {
                         e.insert(cli_input[index + 1].clone());
                         index += 1;
                     } else {
@@ -118,7 +122,9 @@ impl Config {
                 }
                 "-tp" => {
                     // concurrency: thread pool
-                    if let std::collections::hash_map::Entry::Vacant(e) = args_opts_map.entry(ServerConfigArguments::ThreadPool) {        
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        args_opts_map.entry(ServerConfigArguments::ThreadPool)
+                    {
                         e.insert(cli_input[index + 1].clone());
                         index += 1;
                     } else {

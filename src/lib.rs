@@ -1,14 +1,16 @@
 use std::{
-    fs,
-    io::{prelude::*},
-    net::{TcpStream, TcpListener},
+    error::Error,
+    fmt, fs,
+    io::prelude::*,
+    net::{TcpListener, TcpStream},
+    process,
     sync::{mpsc, Arc, Mutex},
     thread,
     time::Duration,
-    error::Error,
-    fmt,
 };
-//use std::any::type_name;
+pub mod cli;
+pub mod error;
+use crate::cli::{Config, ServerConfigArguments};
 
 pub struct Server {
     listener: TcpListener,
@@ -17,8 +19,8 @@ pub struct Server {
 
 impl Server {
     /// Creates a new tcp listener and a workers pool, using an ip address and port
-    /// 
-    pub fn new(ip_address_port: &str, workers_pool_size: usize) -> Result<Self, Box<dyn Error>>  {
+    ///
+    pub fn new(ip_address_port: &str, workers_pool_size: usize) -> Result<Self, Box<dyn Error>> {
         let listener = TcpListener::bind(ip_address_port)?;
         let workers_pool = ThreadPool::new(workers_pool_size)?;
         Ok(Server {
@@ -27,8 +29,38 @@ impl Server {
         })
     }
 
+    /// Creates a new tcp listener and a workers pool, using an ip address and port from Config settings
+    ///
+    pub fn init(config: Config) -> Result<Self, Box<dyn Error>> {
+        let ip_addr = config
+            .args_opts_map
+            .get(&ServerConfigArguments::IpAddress)
+            .unwrap();
+        let port = config
+            .args_opts_map
+            .get(&ServerConfigArguments::Port)
+            .unwrap();
+        let ip_addr_port = format!("{}:{}", ip_addr, port);
+
+        let pool_size: usize = match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
+            Some(value) => match value.parse() {
+                Ok(size) => size,
+                Err(_) => process::exit(0),
+            },
+            None => process::exit(0),
+        };
+
+        let listener = TcpListener::bind(ip_addr_port)?;
+        let workers_pool = ThreadPool::new(pool_size)?;
+
+        Ok(Server {
+            listener,
+            workers_pool,
+        })
+    }
+
     /// Workers pool starts serving clients
-    /// 
+    ///
     pub fn start(&self) -> Result<(), Box<dyn Error>> {
         for stream in self.listener.incoming() {
             let stream = stream?;
@@ -38,11 +70,16 @@ impl Server {
         }
         Ok(())
     }
+
+    pub fn start1(self) -> Self {
+        println!("ttttest");
+        self
+    }
 }
 
-pub fn handle_connection(mut stream: TcpStream) {
+fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    stream.read_exact(&mut buffer).unwrap();
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -69,7 +106,6 @@ pub fn handle_connection(mut stream: TcpStream) {
     stream.flush().unwrap();
 }
 
-
 pub struct ThreadPool {
     workers: Vec<Worker>,
     sender: Option<mpsc::Sender<Job>>,
@@ -78,13 +114,13 @@ pub struct ThreadPool {
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 #[derive(Debug)]
-pub struct PoolCreationError {
+struct PoolCreationError {
     msg: String,
 }
 
 impl PoolCreationError {
     fn new(msg: &str) -> Self {
-        PoolCreationError { 
+        PoolCreationError {
             msg: msg.to_string(),
         }
     }
@@ -106,9 +142,11 @@ impl ThreadPool {
     /// # Panics
     ///
     /// The `new` function will panic if the size is zero.
-    pub fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
-        if size <= 0 {
-            return Err(PoolCreationError::new("Number of workers in pool must be greater than 0."));
+    fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
+        if size < 1 {
+            return Err(PoolCreationError::new(
+                "Number of workers in pool must be greater than 0.",
+            ));
         }
 
         let (sender, receiver) = mpsc::channel();
@@ -125,10 +163,9 @@ impl ThreadPool {
             workers,
             sender: Some(sender),
         })
-    
     }
 
-    pub fn execute<F>(&self, f: F)
+    fn execute<F>(&self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
@@ -182,11 +219,10 @@ impl Worker {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn invalid_server_ip() {
         let invalid_ip_address = "127.0.1:7878";
@@ -197,7 +233,5 @@ mod tests {
         } else {
             panic!("Expected Err, but got Ok");
         }
-
     }
-    
 }

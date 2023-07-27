@@ -1,13 +1,14 @@
+/// This example creates a web server with a threads pool.  
+//  As an example, to run this use:
+//    "cargo run --example multi_threaded_server start -ip 127.0.0.1 -p 7878 -tp 10"
+extern crate boowebserver;
+use boowebserver::cli::{Config, HelpMenu, ServerCommand};
+use boowebserver::Server;
 use std::env;
 use std::error::Error;
 use std::process;
-pub mod cli;
-pub mod error;
-use boowebserver::cli::{Config, HelpMenu, ServerCommand};
-use boowebserver::{Server, ServerConcurrency};
 
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let cli_input: Vec<String> = env::args().collect();
     let config = Config::build(&cli_input).unwrap_or_else(|err| {
         eprintln!("{err}");
@@ -17,10 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match config.command {
         ServerCommand::Start => {
             let server = Server::init(config)?;
-            match server.concurrency {
-                ServerConcurrency::RunningAsync => server.start_async().await?,
-                ServerConcurrency::RunningThreadPool => server.start_tp()?,
-            }
+            server.start_tp()?;
         }
         ServerCommand::Help => {
             HelpMenu::show();

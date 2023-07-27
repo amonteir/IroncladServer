@@ -32,14 +32,15 @@ impl HelpMenu {
           help          Show this help message and exit
           start         Start the web server
           
-        Options:
-          -ip           Input IP address of the web server, e.g. '-ip 127.0.0.1'
-          -p            Input listening port of the web server, e.g. '-p 8080' 
+        Options ('*' means mandatory):
+          -ip           * Input IP address of the web server, e.g. '-ip 127.0.0.1'
+          -p            * Input listening port of the web server, e.g. '-p 8080' 
           -tp           Input thread pool size, e.g. '-tp 10'
           -v            Show program's version number and exit
     
         Usage example:
           boowebserver start -ip 127.0.0.1 -p 8080 -tp 10
+          boowebserver help
         "#;
 
         println!("{}", help_menu);

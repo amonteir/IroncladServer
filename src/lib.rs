@@ -8,30 +8,32 @@ use std::{
     thread,
     time::Duration,
 };
+use async_std::{task, prelude::*};
+use futures::stream::StreamExt;
+
 pub mod cli;
 pub mod error;
 use crate::cli::{Config, ServerConfigArguments};
 
+
+pub enum ServerConcurrency {
+    RunningAsync,
+    RunningThreadPool,
+
+}
+
 pub struct Server {
-    listener: TcpListener,
-    workers_pool: ThreadPool,
+    ip_port: String,
+    pub concurrency: ServerConcurrency,
+    workers_pool: Option<ThreadPool>,
 }
 
 impl Server {
-    /// Creates a new tcp listener and a workers pool, using an ip address and port
+    /// Reads a ip address, port and concurrency settings from Config (i.e. user cli input)
+    /// and returns the Server object
     ///
-    pub fn new(ip_address_port: &str, workers_pool_size: usize) -> Result<Self, Box<dyn Error>> {
-        let listener = TcpListener::bind(ip_address_port)?;
-        let workers_pool = ThreadPool::new(workers_pool_size)?;
-        Ok(Server {
-            listener,
-            workers_pool,
-        })
-    }
+    pub fn init(config: Config) -> Result<Server, Box<dyn Error>> {
 
-    /// Creates a new tcp listener and a workers pool, using an ip address and port from Config settings
-    ///
-    pub fn init(config: Config) -> Result<Self, Box<dyn Error>> {
         let ip_addr = config
             .args_opts_map
             .get(&ServerConfigArguments::IpAddress)
@@ -40,46 +42,104 @@ impl Server {
             .args_opts_map
             .get(&ServerConfigArguments::Port)
             .unwrap();
-        let ip_addr_port = format!("{}:{}", ip_addr, port);
+        let ip_port = format!("{}:{}", ip_addr, port);
 
-        let pool_size: usize = match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
-            Some(value) => match value.parse() {
-                Ok(size) => size,
-                Err(_) => process::exit(0),
+        let (concurrency, workers_pool) = match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
+            Some(value) => { 
+                let pool_size: usize =  match value.parse() {
+                        Ok(size) => size,
+                        Err(_) => process::exit(0), // TODO: change this to an Error in error.rs
+                    };
+                (ServerConcurrency::RunningThreadPool, Some(ThreadPool::new(pool_size)?))
             },
-            None => process::exit(0),
+            None => (ServerConcurrency::RunningAsync, None),
         };
-
-        let listener = TcpListener::bind(ip_addr_port)?;
-        let workers_pool = ThreadPool::new(pool_size)?;
-
-        Ok(Server {
-            listener,
+        Ok(Server{
+            ip_port,
+            concurrency,
             workers_pool,
         })
     }
 
-    /// Workers pool starts serving clients
-    ///
-    pub fn start(&self) -> Result<(), Box<dyn Error>> {
-        for stream in self.listener.incoming() {
+    /// Starts the server with a thread pool
+    pub fn start_tp(&self) -> Result<(), Box<dyn Error>> {
+    
+        let listener = TcpListener::bind(&self.ip_port)?;
+        println!("Started the server with a thread pool.");
+
+        for stream in listener.incoming() {
             let stream = stream?;
-            self.workers_pool.execute(|| {
-                handle_connection(stream);
-            });
+            match &self.workers_pool{
+                Some(pool) => {
+                    pool.execute(|| {
+                        handle_connection_tp(stream);
+                    });
+                },
+                None => {
+                    process::exit(0); // TODO: change this to an Error in error.rs
+                }             
+            }
         }
         Ok(())
     }
+    /// Starts the server using async
+    ///
+    pub async fn start_async(&self) -> Result<(), Box<dyn Error>> {
 
+        let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
+        println!("Started the server in async mode.");
+
+        listener
+            .incoming()
+            .for_each_concurrent(/* limit */ None, |tcpstream| async move {
+                let tcpstream = tcpstream.unwrap();
+                handle_connection_async(tcpstream).await;
+            })
+            .await;
+
+        Ok(())
+    }
+
+    /// Chaining POC
     pub fn start1(self) -> Self {
         println!("ttttest");
         self
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
+async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read_exact(&mut buffer).unwrap();
+    stream.read(&mut buffer).await.unwrap();
+
+    let get = b"GET / HTTP/1.1\r\n";
+    let sleep = b"GET /sleep HTTP/1.1\r\n";
+
+    let (status_line, filename) = if buffer.starts_with(get) {
+        ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+    } else if buffer.starts_with(sleep) {
+        task::sleep(Duration::from_secs(5)).await;
+        ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
+    };
+    let contents = fs::read_to_string(filename).unwrap();
+
+    let response = format!("{status_line}{contents}");
+    stream.write(response.as_bytes()).await.unwrap();
+    stream.flush().await.unwrap();
+}
+
+fn handle_connection_tp(mut stream: TcpStream) {
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
+
+    /*let buf_reader = BufReader::new(&mut stream);
+    let buffer: Vec<_> = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+*/
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -222,11 +282,22 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn invalid_server_ip() {
-        let invalid_ip_address = "127.0.1:7878";
-        let result = Server::new(invalid_ip_address, 10);
+        let mut config_args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
+        config_args_opts_map.insert(ServerConfigArguments::IpAddress, String::from("127.0.1"));
+        config_args_opts_map.insert(ServerConfigArguments::Port, String::from("7878"));
+        config_args_opts_map.insert(ServerConfigArguments::ThreadPool, String::from("10"));
+        let test_config: Config = Config{
+            program: "boowebserver",
+            command: cli::ServerCommand::Start,
+            args_opts_map: config_args_opts_map,
+        };
+
+        let server = Server::init(test_config).unwrap();
+        let result = server.start_tp();
 
         if let Err(e) = result {
             assert_eq!(e.to_string(), "No such host is known. (os error 11001)");

@@ -1,5 +1,5 @@
 # Rust Web Server
-[![Build](https://github.com/amonteir/boo-webserver/actions/workflows/main.yml/badge.svg)
+[![Build](https://github.com/amonteir/boo-webserver/actions/workflows/ci.yaml/badge.svg)](https://github.com/amonteir/boo-webserver/actions/workflows/ci.yaml)
 [![License](http://img.shields.io/:license-MIT-blue.svg)](http://doge.mit-license.org)
 
 

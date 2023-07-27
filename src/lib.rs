@@ -1,3 +1,5 @@
+use async_std::{prelude::*, task};
+use futures::stream::StreamExt;
 use std::{
     error::Error,
     fmt, fs,
@@ -8,20 +10,14 @@ use std::{
     thread,
     time::Duration,
 };
-use async_std::{task, prelude::*};
-use futures::stream::StreamExt;
-
 pub mod cli;
 pub mod error;
 use crate::cli::{Config, ServerConfigArguments};
 
-
 pub enum ServerConcurrency {
     RunningAsync,
     RunningThreadPool,
-
 }
-
 pub struct Server {
     ip_port: String,
     pub concurrency: ServerConcurrency,
@@ -33,7 +29,6 @@ impl Server {
     /// and returns the Server object
     ///
     pub fn init(config: Config) -> Result<Server, Box<dyn Error>> {
-
         let ip_addr = config
             .args_opts_map
             .get(&ServerConfigArguments::IpAddress)
@@ -44,17 +39,21 @@ impl Server {
             .unwrap();
         let ip_port = format!("{}:{}", ip_addr, port);
 
-        let (concurrency, workers_pool) = match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
-            Some(value) => { 
-                let pool_size: usize =  match value.parse() {
+        let (concurrency, workers_pool) =
+            match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
+                Some(value) => {
+                    let pool_size: usize = match value.parse() {
                         Ok(size) => size,
                         Err(_) => process::exit(0), // TODO: change this to an Error in error.rs
                     };
-                (ServerConcurrency::RunningThreadPool, Some(ThreadPool::new(pool_size)?))
-            },
-            None => (ServerConcurrency::RunningAsync, None),
-        };
-        Ok(Server{
+                    (
+                        ServerConcurrency::RunningThreadPool,
+                        Some(ThreadPool::new(pool_size)?),
+                    )
+                }
+                None => (ServerConcurrency::RunningAsync, None),
+            };
+        Ok(Server {
             ip_port,
             concurrency,
             workers_pool,
@@ -63,21 +62,20 @@ impl Server {
 
     /// Starts the server with a thread pool
     pub fn start_tp(&self) -> Result<(), Box<dyn Error>> {
-    
         let listener = TcpListener::bind(&self.ip_port)?;
         println!("Started the server with a thread pool.");
 
         for stream in listener.incoming() {
             let stream = stream?;
-            match &self.workers_pool{
+            match &self.workers_pool {
                 Some(pool) => {
                     pool.execute(|| {
                         handle_connection_tp(stream);
                     });
-                },
+                }
                 None => {
                     process::exit(0); // TODO: change this to an Error in error.rs
-                }             
+                }
             }
         }
         Ok(())
@@ -85,7 +83,6 @@ impl Server {
     /// Starts the server using async
     ///
     pub async fn start_async(&self) -> Result<(), Box<dyn Error>> {
-
         let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
         println!("Started the server in async mode.");
 
@@ -132,14 +129,6 @@ async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
 fn handle_connection_tp(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
     stream.read(&mut buffer).unwrap();
-
-    /*let buf_reader = BufReader::new(&mut stream);
-    let buffer: Vec<_> = buf_reader
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
-*/
 
     let get = b"GET / HTTP/1.1\r\n";
     let sleep = b"GET /sleep HTTP/1.1\r\n";
@@ -290,7 +279,7 @@ mod tests {
         config_args_opts_map.insert(ServerConfigArguments::IpAddress, String::from("127.0.1"));
         config_args_opts_map.insert(ServerConfigArguments::Port, String::from("7878"));
         config_args_opts_map.insert(ServerConfigArguments::ThreadPool, String::from("10"));
-        let test_config: Config = Config{
+        let test_config: Config = Config {
             program: "boowebserver",
             command: cli::ServerCommand::Start,
             args_opts_map: config_args_opts_map,

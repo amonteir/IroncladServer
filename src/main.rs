@@ -6,7 +6,6 @@ pub mod error;
 use boowebserver::cli::{Config, HelpMenu, ServerCommand};
 use boowebserver::{Server, ServerConcurrency};
 
-
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli_input: Vec<String> = env::args().collect();

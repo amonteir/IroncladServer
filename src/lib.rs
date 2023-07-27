@@ -106,53 +106,69 @@ impl Server {
 
 async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).await.unwrap();
+    match stream.read(&mut buffer).await {
+        Ok(bytes_read) => {
+            println!("Read {} bytes", bytes_read);
 
-    let get = b"GET / HTTP/1.1\r\n";
-    let sleep = b"GET /sleep HTTP/1.1\r\n";
+            let get = b"GET / HTTP/1.1\r\n";
+            let sleep = b"GET /sleep HTTP/1.1\r\n";
 
-    let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
-    } else if buffer.starts_with(sleep) {
-        task::sleep(Duration::from_secs(5)).await;
-        ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
-    };
-    let contents = fs::read_to_string(filename).unwrap();
+            let (status_line, filename) = if buffer.starts_with(get) {
+                ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+            } else if buffer.starts_with(sleep) {
+                task::sleep(Duration::from_secs(5)).await;
+                ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+            } else {
+                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
+            };
+            let contents = fs::read_to_string(filename).unwrap();
 
-    let response = format!("{status_line}{contents}");
-    stream.write(response.as_bytes()).await.unwrap();
-    stream.flush().await.unwrap();
+            let response = format!("{status_line}{contents}");
+            stream.write(response.as_bytes()).await.unwrap();
+            stream.flush().await.unwrap();
+        }
+        Err(e) => {
+            // Handle the error in some way.
+            eprintln!("Error reading from stream: {}", e);
+        }
+    }
 }
 
 fn handle_connection_tp(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
+    match stream.read(&mut buffer) {
+        Ok(bytes_read) => {
+            println!("Read {} bytes", bytes_read);
 
-    let get = b"GET / HTTP/1.1\r\n";
-    let sleep = b"GET /sleep HTTP/1.1\r\n";
+            let get = b"GET / HTTP/1.1\r\n";
+            let sleep = b"GET /sleep HTTP/1.1\r\n";
 
-    let (status_line, filename) = if buffer.starts_with(get) {
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else if buffer.starts_with(sleep) {
-        thread::sleep(Duration::from_secs(5));
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
-    };
+            let (status_line, filename) = if buffer.starts_with(get) {
+                ("HTTP/1.1 200 OK", "hello.html")
+            } else if buffer.starts_with(sleep) {
+                thread::sleep(Duration::from_secs(5));
+                ("HTTP/1.1 200 OK", "hello.html")
+            } else {
+                ("HTTP/1.1 404 NOT FOUND", "404.html")
+            };
 
-    let contents = fs::read_to_string(filename).unwrap();
+            let contents = fs::read_to_string(filename).unwrap();
 
-    let response = format!(
-        "{}\r\nContent-Length: {}\r\n\r\n{}",
-        status_line,
-        contents.len(),
-        contents
-    );
+            let response = format!(
+                "{}\r\nContent-Length: {}\r\n\r\n{}",
+                status_line,
+                contents.len(),
+                contents
+            );
 
-    stream.write_all(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+            stream.write_all(response.as_bytes()).unwrap();
+            stream.flush().unwrap();
+        }
+        Err(e) => {
+            // Handle the error in some way.
+            eprintln!("Error reading from stream: {}", e);
+        }
+    }
 }
 
 pub struct ThreadPool {

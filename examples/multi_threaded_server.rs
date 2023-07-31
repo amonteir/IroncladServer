@@ -1,9 +1,9 @@
 /// This example creates a web server with a threads pool.  
 //  As an example, to run this use:
 //    "cargo run --example multi_threaded_server start -ip 127.0.0.1 -p 7878 -tp 10"
-extern crate boowebserver;
-use boowebserver::cli::{Config, HelpMenu, ServerCommand};
-use boowebserver::Server;
+extern crate ironcladserver;
+use ironcladserver::cli::{Config, HelpMenu, ServerCommand};
+use ironcladserver::Server;
 use std::env;
 use std::error::Error;
 use std::process;

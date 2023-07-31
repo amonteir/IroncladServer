@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "A high performance Rust web server that supports multithreads and async and is used as a playground for testing and improving your hacking skills while learning about AppSec and how to build secure software."
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/amonteir/IroncladServer.git"
 
 [dependencies]
 futures = "0.3"

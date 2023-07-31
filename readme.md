@@ -5,7 +5,7 @@
 
 Welcome to Ironclad Server, your personal playground for testing and improving your hacking skills while learning about [Application Security](https://en.wikipedia.org/wiki/Application_security). 
 
-If you work or are interested in the field of Cyber Security or Ethical Hacking, chances are that you know a lot of websites that that allow you to develop your hacking skills. At some point you may ask yourself... how could I actually change the server's source code and turn it **unhackable** ? :superhero_woman:
+If you work or are interested in the field of Cyber Security or Ethical Hacking, chances are that you know a lot of websites that allow you to develop your hacking skills. At some point, you may ask yourself... how could I actually change the server's source code and turn it **unhackable**? :superhero_woman:
 
 ## About
 
@@ -13,7 +13,7 @@ IroncladServer is a web server designed with the purpose of providing a safe and
 
 In its first release, the server features text input fields where users can input a username and password. 
 
-<span style="color:red">The challenge?</span> **Try to break in! Hack it away with your dodgy, dark-webby tools!**  :space_invader: 
+The challenge? **Try to break in! Hack it away with your dodgy, dark-webby tools!**  :space_invader: 
 
 Our ultimate goal is to provide a robust, secure template that developers can use for their own projects, while simultaneously educating users about the importance of application security.
 

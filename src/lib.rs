@@ -107,19 +107,19 @@ impl Server {
 async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
     let mut buffer = [0; 1024];
     match stream.read(&mut buffer).await {
-        Ok(bytes_read) => {
-            println!("Read {} bytes", bytes_read);
+        Ok(_bytes_read) => {
+            //println!("Read {} bytes", bytes_read);
 
             let get = b"GET / HTTP/1.1\r\n";
             let sleep = b"GET /sleep HTTP/1.1\r\n";
 
             let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
             } else if buffer.starts_with(sleep) {
                 task::sleep(Duration::from_secs(5)).await;
-                ("HTTP/1.1 200 OK\r\n\r\n", "hello.html")
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
             } else {
-                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", "404.html")
+                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", r"resources\html\404.html")
             };
             let contents = fs::read_to_string(filename).unwrap();
 
@@ -137,19 +137,19 @@ async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
 fn handle_connection_tp(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
     match stream.read(&mut buffer) {
-        Ok(bytes_read) => {
-            println!("Read {} bytes", bytes_read);
+        Ok(_bytes_read) => {
+            //println!("Read {} bytes", bytes_read);
 
             let get = b"GET / HTTP/1.1\r\n";
             let sleep = b"GET /sleep HTTP/1.1\r\n";
 
             let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK", "hello.html")
+                ("HTTP/1.1 200 OK", r"resources\html\home.html")
             } else if buffer.starts_with(sleep) {
                 thread::sleep(Duration::from_secs(5));
-                ("HTTP/1.1 200 OK", "hello.html")
+                ("HTTP/1.1 200 OK", r"resources\html\home.html")
             } else {
-                ("HTTP/1.1 404 NOT FOUND", "404.html")
+                ("HTTP/1.1 404 NOT FOUND", r"resources\html\404.html")
             };
 
             let contents = fs::read_to_string(filename).unwrap();

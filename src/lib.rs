@@ -296,7 +296,7 @@ mod tests {
         config_args_opts_map.insert(ServerConfigArguments::Port, String::from("7878"));
         config_args_opts_map.insert(ServerConfigArguments::ThreadPool, String::from("10"));
         let test_config: Config = Config {
-            program: "boowebserver",
+            program: "ironcladserver",
             command: cli::ServerCommand::Start,
             args_opts_map: config_args_opts_map,
         };

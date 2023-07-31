@@ -3,8 +3,8 @@ use std::error::Error;
 use std::process;
 pub mod cli;
 pub mod error;
-use boowebserver::cli::{Config, HelpMenu, ServerCommand};
-use boowebserver::{Server, ServerConcurrency};
+use ironcladserver::cli::{Config, HelpMenu, ServerCommand};
+use ironcladserver::{Server, ServerConcurrency};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {

@@ -148,14 +148,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "boowebserver"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "futures",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -367,6 +359,14 @@ dependencies = [
  "hermit-abi",
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "ironcladserver"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "futures",
 ]
 
 [[package]]

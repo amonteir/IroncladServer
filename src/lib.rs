@@ -84,7 +84,7 @@ impl Server {
     ///
     pub async fn start_async(&self) -> Result<(), Box<dyn Error>> {
         let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
-        println!("Started the server in async mode.");
+        println!("Started the server and serving requests using async.");
 
         listener
             .incoming()

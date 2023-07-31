@@ -71,7 +71,6 @@ impl Config {
         }
 
         Config::parse_args_opts(cli_input, &mut args_opts_map)?;
-        //.map_err(|err| ConfigError::ParseError(err.to_string()))?;
 
         if !args_opts_map.contains_key(&ServerConfigArguments::IpAddress) {
             return Err(ConfigError::MissingOption("-ip".to_string()));
@@ -143,5 +142,50 @@ impl Config {
             index += 1;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::{Config, ServerConfigArguments};
+
+    #[test]
+    fn check_cli_input() {
+        let mut config_args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
+        let cli_input = vec![
+            "boowebserver".to_string(),
+            "start".to_string(),
+            "-ip".to_string(),
+            "192.168.0.1".to_string(),
+            "-p".to_string(),
+            "443".to_string(),
+            "-tp".to_string(),
+            "10".to_string(),
+        ];
+
+        match Config::parse_args_opts(&cli_input, &mut config_args_opts_map) {
+            Ok(_) => {
+                if let Some(ip) = config_args_opts_map.get(&ServerConfigArguments::IpAddress) {
+                    println!("IP: {}", ip);
+                    assert_eq!(*ip, "192.168.0.1".to_string());
+                } else {
+                    panic!("Fix 'cli_input' vector.")
+                }
+                if let Some(ip) = config_args_opts_map.get(&ServerConfigArguments::Port) {
+                    println!("IP: {}", ip);
+                    assert_eq!(*ip, "443".to_string());
+                } else {
+                    panic!("Fix 'cli_input' vector.")
+                }
+                if let Some(ip) = config_args_opts_map.get(&ServerConfigArguments::ThreadPool) {
+                    println!("IP: {}", ip);
+                    assert_eq!(*ip, "10".to_string());
+                } else {
+                    panic!("Fix 'cli_input' vector.")
+                }
+            }
+            Err(e) => panic!("Error: {}.", e),
+        }
     }
 }

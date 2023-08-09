@@ -18,7 +18,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ServerCommand::Start => {
             let server = Server::init(config)?;
             match server.concurrency {
-                ServerConcurrency::RunningAsync => server.start_async().await?,
+                //ServerConcurrency::RunningAsync => server.start_async().await?,
+                ServerConcurrency::RunningAsync => server.start_async_tls().await?,
                 ServerConcurrency::RunningThreadPool => server.start_tp()?,
             }
         }

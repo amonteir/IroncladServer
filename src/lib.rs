@@ -102,8 +102,8 @@ impl Server {
     /// Starts the server using async and tls
     ///
     pub async fn start_async_tls(&self) -> Result<(), Box<dyn Error>> { 
-        let certs = load_certs("sample.pem")?;
-        let key = load_private_key("sample.rsa")?;
+        let certs = load_certs("certs/sample.pem")?;
+        let key = load_private_key("certs/sample.rsa")?;
 
         let mut config = ServerConfig::new(NoClientAuth::new());
         config.set_single_cert(certs, key).unwrap();

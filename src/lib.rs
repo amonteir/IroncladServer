@@ -1,5 +1,7 @@
 use async_std::{prelude::*, task};
+use async_tls::TlsAcceptor;
 use futures::stream::StreamExt;
+use rustls::{NoClientAuth, ServerConfig};
 use std::{
     error::Error,
     fmt, fs,
@@ -10,12 +12,10 @@ use std::{
     thread,
     time::Duration,
 };
-use rustls::{NoClientAuth, ServerConfig};
-use async_tls::TlsAcceptor;
+
 pub mod cli;
 pub mod error;
 use crate::cli::{Config, ServerConfigArguments};
-
 
 pub enum ServerConcurrency {
     RunningAsync,
@@ -101,7 +101,7 @@ impl Server {
     }
     /// Starts the server using async and tls
     ///
-    pub async fn start_async_tls(&self) -> Result<(), Box<dyn Error>> { 
+    pub async fn start_async_tls(&self) -> Result<(), Box<dyn Error>> {
         let certs = load_certs("certs/sample.pem")?;
         let key = load_private_key("certs/sample.rsa")?;
 
@@ -111,7 +111,6 @@ impl Server {
         let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
         println!("Started the tls server in async mode.");
-    
         listener
             .incoming()
             .for_each_concurrent(/* limit */ None, {
@@ -121,9 +120,7 @@ impl Server {
                     async move {
                         if let Ok(tcpstream) = tcpstream_result {
                             match acceptor.accept(tcpstream).await {
-                                Ok(stream) => {
-                                    handle_connection_async_tls(stream).await
-                                }
+                                Ok(stream) => handle_connection_async_tls(stream).await,
                                 Err(e) => {
                                     println!("TLS handshake error: {}", e);
                                 }
@@ -135,11 +132,8 @@ impl Server {
                 }
             })
             .await;
-        
         Ok(())
     }
-    
-    
     /// Chaining POC
     pub fn start1(self) -> Self {
         println!("ttttest");
@@ -161,10 +155,7 @@ fn load_certs(filename: &str) -> std::io::Result<Vec<rustls::Certificate>> {
     // Load and return certificate.
     let certs = rustls_pemfile::certs(&mut reader)
         .map_err(|_| error("failed to load certificate".into()))?;
-    Ok(certs
-        .into_iter()
-        .map(rustls::Certificate)
-        .collect())
+    Ok(certs.into_iter().map(rustls::Certificate).collect())
 }
 
 // Load private key from file.
@@ -180,12 +171,12 @@ fn load_private_key(filename: &str) -> std::io::Result<rustls::PrivateKey> {
     if keys.len() != 1 {
         return Err(error("expected a single private key".into()));
     }
-
     Ok(rustls::PrivateKey(keys[0].clone()))
 }
 
-
-async fn handle_connection_async_tls(mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>) {
+async fn handle_connection_async_tls(
+    mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
+) {
     let mut buffer = [0; 1024];
     match stream.read(&mut buffer).await {
         Ok(bytes_read) => {

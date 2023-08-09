@@ -1,5 +1,7 @@
 use async_std::{prelude::*, task};
+use async_tls::TlsAcceptor;
 use futures::stream::StreamExt;
+use rustls::{NoClientAuth, ServerConfig};
 use std::{
     error::Error,
     fmt, fs,
@@ -10,6 +12,7 @@ use std::{
     thread,
     time::Duration,
 };
+
 pub mod cli;
 pub mod error;
 use crate::cli::{Config, ServerConfigArguments};
@@ -96,11 +99,117 @@ impl Server {
 
         Ok(())
     }
+    /// Starts the server using async and tls
+    ///
+    pub async fn start_async_tls(&self) -> Result<(), Box<dyn Error>> {
+        let certs = load_certs("certs/sample.pem")?;
+        let key = load_private_key("certs/sample.rsa")?;
 
+        let mut config = ServerConfig::new(NoClientAuth::new());
+        config.set_single_cert(certs, key).unwrap();
+
+        let acceptor = TlsAcceptor::from(Arc::new(config));
+        let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
+        println!("Started the tls server in async mode.");
+        listener
+            .incoming()
+            .for_each_concurrent(/* limit */ None, {
+                let acceptor = acceptor.clone();
+                move |tcpstream_result| {
+                    let acceptor = acceptor.clone();
+                    async move {
+                        if let Ok(tcpstream) = tcpstream_result {
+                            match acceptor.accept(tcpstream).await {
+                                Ok(stream) => handle_connection_async_tls(stream).await,
+                                Err(e) => {
+                                    println!("TLS handshake error: {}", e);
+                                }
+                            }
+                        } else {
+                            println!("Error accepting tcp stream.");
+                        }
+                    }
+                }
+            })
+            .await;
+        Ok(())
+    }
     /// Chaining POC
     pub fn start1(self) -> Self {
         println!("ttttest");
         self
+    }
+}
+
+fn error(err: String) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, err)
+}
+
+// Load public certificate from file.
+fn load_certs(filename: &str) -> std::io::Result<Vec<rustls::Certificate>> {
+    // Open certificate file.
+    let certfile = fs::File::open(filename)
+        .map_err(|e| error(format!("failed to open {}: {}", filename, e)))?;
+    let mut reader = std::io::BufReader::new(certfile);
+
+    // Load and return certificate.
+    let certs = rustls_pemfile::certs(&mut reader)
+        .map_err(|_| error("failed to load certificate".into()))?;
+    Ok(certs.into_iter().map(rustls::Certificate).collect())
+}
+
+// Load private key from file.
+fn load_private_key(filename: &str) -> std::io::Result<rustls::PrivateKey> {
+    // Open keyfile.
+    let keyfile = fs::File::open(filename)
+        .map_err(|e| error(format!("failed to open {}: {}", filename, e)))?;
+    let mut reader = std::io::BufReader::new(keyfile);
+
+    // Load and return a single private key.
+    let keys = rustls_pemfile::rsa_private_keys(&mut reader)
+        .map_err(|_| error("failed to load private key".into()))?;
+    if keys.len() != 1 {
+        return Err(error("expected a single private key".into()));
+    }
+    Ok(rustls::PrivateKey(keys[0].clone()))
+}
+
+async fn handle_connection_async_tls(
+    mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
+) {
+    let mut buffer = [0; 1024];
+    match stream.read(&mut buffer).await {
+        Ok(bytes_read) => {
+            println!("Read {} bytes", bytes_read);
+
+            let get = b"GET / HTTP/1.1\r\n";
+            let sleep = b"GET /sleep HTTP/1.1\r\n";
+
+            let (status_line, filename) = if buffer.starts_with(get) {
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
+            } else if buffer.starts_with(sleep) {
+                task::sleep(Duration::from_secs(5)).await;
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
+            } else {
+                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", r"resources\html\404.html")
+            };
+
+            if let Ok(contents) = fs::read_to_string(filename) {
+                let response = format!("{}{}", status_line, contents);
+                if let Err(e) = stream.write(response.as_bytes()).await {
+                    eprintln!("Error writing to stream: {}", e);
+                }
+                if let Err(e) = stream.flush().await {
+                    eprintln!("Error flushing stream: {}", e);
+                }
+            } else {
+                eprintln!("Error reading file: {}", filename);
+            }
+        }
+        Err(e) => {
+            // Handle the error in some way.
+            eprintln!("Error reading from stream: {}", e);
+        }
     }
 }
 

@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'boowebserver'",
+            "name": "Debug unit tests in library 'ironcladserver'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=boowebserver"
+                    "--package=ironcladserver"
                 ],
                 "filter": {
-                    "name": "boowebserver",
+                    "name": "ironcladserver",
                     "kind": "lib"
                 }
             },
@@ -26,34 +26,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'boowebserver'",
+            "name": "Debug executable 'ironcladserver'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=boowebserver",
-                    "--package=boowebserver"
+                    "--bin=ironcladserver",
+                    "--package=ironcladserver"
                 ],
                 "filter": {
-                    "name": "boowebserver",
+                    "name": "ironcladserver",
                     "kind": "bin"
                 }
             },
-            "args": ["start", "-ip", "127.0.0.1", "-p", "7878", "-tp", "10"],
+            "args": ["start", "-ip", "127.0.0.1", "-p", "7878"],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'boowebserver'",
+            "name": "Debug unit tests in executable 'ironcladserver'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=boowebserver",
-                    "--package=boowebserver"
+                    "--bin=ironcladserver",
+                    "--package=ironcladserver"
                 ],
                 "filter": {
-                    "name": "boowebserver",
+                    "name": "ironcladserver",
                     "kind": "bin"
                 }
             },

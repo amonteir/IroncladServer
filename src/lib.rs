@@ -186,10 +186,10 @@ async fn handle_connection_async_tls(
             let sleep = b"GET /sleep HTTP/1.1\r\n";
 
             let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\login.html")
             } else if buffer.starts_with(sleep) {
                 task::sleep(Duration::from_secs(5)).await;
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
+                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\login.html")
             } else {
                 ("HTTP/1.1 404 NOT FOUND\r\n\r\n", r"resources\html\404.html")
             };

@@ -1,7 +1,10 @@
-use async_std::{prelude::*, task};
+#![forbid(unsafe_code)]
+
+use async_std::prelude::*;
 use async_tls::TlsAcceptor;
 use futures::stream::StreamExt;
 use rustls::{NoClientAuth, ServerConfig};
+use serde_json::json;
 use std::{
     error::Error,
     fmt, fs,
@@ -10,12 +13,16 @@ use std::{
     process,
     sync::{mpsc, Arc, Mutex},
     thread,
-    time::Duration,
 };
 
 pub mod cli;
 pub mod error;
+pub mod route;
+pub mod status;
 use crate::cli::{Config, ServerConfigArguments};
+use crate::route::{
+    route_request, route_request_async, route_request_async1, Route, PATH_TO_404, PATH_TO_HOME,
+};
 
 pub enum ServerConcurrency {
     RunningAsync,
@@ -182,32 +189,52 @@ async fn handle_connection_async_tls(
         Ok(bytes_read) => {
             println!("Read {} bytes", bytes_read);
 
-            let get = b"GET / HTTP/1.1\r\n";
-            let sleep = b"GET /sleep HTTP/1.1\r\n";
+            let (status_line, route) = route_request_async1(&buffer).await;
 
-            let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\login.html")
-            } else if buffer.starts_with(sleep) {
-                task::sleep(Duration::from_secs(5)).await;
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\login.html")
-            } else {
-                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", r"resources\html\404.html")
-            };
+            match route {
+                Route::Homepage => {
+                    if let Ok(contents) = fs::read_to_string(*PATH_TO_HOME) {
+                        let response = format!("{}\r\n\r\n{}", status_line, contents);
+                        if let Err(e) = stream.write(response.as_bytes()).await {
+                            eprintln!("Error writing to stream: {}", e);
+                        }
+                    } else {
+                        eprintln!("Error reading file: home.html");
+                    }
+                }
+                Route::BadRequest => {
+                    if let Ok(contents) = fs::read_to_string(*PATH_TO_404) {
+                        let response = format!("{}\r\n\r\n{}", status_line, contents);
+                        if let Err(e) = stream.write(response.as_bytes()).await {
+                            eprintln!("Error writing to stream: {}", e);
+                        }
+                    } else {
+                        eprintln!("Error reading file: 404.html");
+                    }
+                }
+                Route::Login => {
+                    let payload = json!({
+                        "success": true,
+                        "successMessage": "Successfully logged in"
+                    });
+                    let payload_str = payload.to_string();
+                    let headers = format!(
+                        "Content-Type: application/json\r\nContent-Length: {}",
+                        payload_str.as_bytes().len()
+                    );
 
-            if let Ok(contents) = fs::read_to_string(filename) {
-                let response = format!("{}{}", status_line, contents);
-                if let Err(e) = stream.write(response.as_bytes()).await {
-                    eprintln!("Error writing to stream: {}", e);
+                    let response = format!("{}\r\n{}\r\n\r\n{}", status_line, headers, payload_str);
+
+                    if let Err(e) = stream.write(response.as_bytes()).await {
+                        eprintln!("Error writing to stream: {}", e);
+                    }
                 }
-                if let Err(e) = stream.flush().await {
-                    eprintln!("Error flushing stream: {}", e);
-                }
-            } else {
-                eprintln!("Error reading file: {}", filename);
+            }
+            if let Err(e) = stream.flush().await {
+                eprintln!("Error flushing stream: {}", e);
             }
         }
         Err(e) => {
-            // Handle the error in some way.
             eprintln!("Error reading from stream: {}", e);
         }
     }
@@ -219,17 +246,8 @@ async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
         Ok(_bytes_read) => {
             //println!("Read {} bytes", bytes_read);
 
-            let get = b"GET / HTTP/1.1\r\n";
-            let sleep = b"GET /sleep HTTP/1.1\r\n";
+            let (status_line, filename) = route_request_async(&buffer).await;
 
-            let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
-            } else if buffer.starts_with(sleep) {
-                task::sleep(Duration::from_secs(5)).await;
-                ("HTTP/1.1 200 OK\r\n\r\n", r"resources\html\home.html")
-            } else {
-                ("HTTP/1.1 404 NOT FOUND\r\n\r\n", r"resources\html\404.html")
-            };
             let contents = fs::read_to_string(filename).unwrap();
 
             let response = format!("{status_line}{contents}");
@@ -237,7 +255,6 @@ async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
             stream.flush().await.unwrap();
         }
         Err(e) => {
-            // Handle the error in some way.
             eprintln!("Error reading from stream: {}", e);
         }
     }
@@ -249,17 +266,7 @@ fn handle_connection_tp(mut stream: TcpStream) {
         Ok(_bytes_read) => {
             //println!("Read {} bytes", bytes_read);
 
-            let get = b"GET / HTTP/1.1\r\n";
-            let sleep = b"GET /sleep HTTP/1.1\r\n";
-
-            let (status_line, filename) = if buffer.starts_with(get) {
-                ("HTTP/1.1 200 OK", r"resources\html\home.html")
-            } else if buffer.starts_with(sleep) {
-                thread::sleep(Duration::from_secs(5));
-                ("HTTP/1.1 200 OK", r"resources\html\home.html")
-            } else {
-                ("HTTP/1.1 404 NOT FOUND", r"resources\html\404.html")
-            };
+            let (status_line, filename) = route_request(&buffer);
 
             let contents = fs::read_to_string(filename).unwrap();
 

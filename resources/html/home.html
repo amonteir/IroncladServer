@@ -4,11 +4,68 @@
     <meta charset="utf-8">
     <title>Ironclad Server</title>
   </head>
-  <body style = "font-family: Consolas">
+  <body style="font-family: Consolas">
     <h1>Ironclad Server</h1>
     <p>Can you hack this server? 👾 </p>
     <p>The purpose is for you to try to hack this landing page.</p>
     <p>If you like it, <a href="https://github.com/amonteir/IroncladServer">fork the code</a> and start using it in your own projects. 
       It's built with 💛 and <a href="https://www.rust-lang.org/">Rust programming language</a>.</p>
+    <br>
+    <form id="loginForm" action="https://127.0.0.1:7878/login/" method="post">
+      <div class="container">
+        <label for="username"><b>Username</b></label>
+        <input type="text" placeholder="Enter Username" name="username" required>
+      
+        <label for="pwd"><b>Password</b></label>
+        <input type="password" placeholder="Enter Password" name="pwd" required>
+      
+        <button type="submit">Login</button>
+      </div>
+    </form>
+    <div id="successMessage" style="display: none;"></div>
+
+    <script>
+      document.getElementById('loginForm').addEventListener('submit', async function(event) {
+        event.preventDefault(); // Prevent default form submission
+    
+        const formData = new FormData(event.target);
+        const username = formData.get('username');
+        const password = formData.get('pwd');
+    
+        const payload = {
+            username: username,
+            pwd: password
+        };
+    
+        let response; // Declare response outside of the try block
+    
+        try {
+            response = await fetch(event.target.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+            });
+    
+            const data = await response.json();
+
+            if (data.success) {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('successMessage').textContent = `Successfully logged in user ${username}`;
+                document.getElementById('successMessage').style.display = 'block';
+            } else {
+                alert('Login failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (response) { // Check if response is defined before trying to read from it
+                const text = await response.text();
+                console.error('Received response:', text);
+            }
+        }
+      });
+    </script>
+    
   </body>
 </html>

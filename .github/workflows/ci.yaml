@@ -1,4 +1,4 @@
-name: CI
+name: Build
 
 on:
   push:
@@ -11,6 +11,8 @@ permissions:
 jobs:
   fmt:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     name: stable / fmt
     steps:
       - uses: actions/checkout@v3
@@ -24,6 +26,8 @@ jobs:
         run: cargo fmt --check
   clippy:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     name: ${{ matrix.toolchain }} / clippy
     permissions:
       contents: read
@@ -47,6 +51,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
   doc:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     name: nightly / doc
     steps:
       - uses: actions/checkout@v3
@@ -60,6 +66,8 @@ jobs:
           RUSTDOCFLAGS: --cfg docsrs
   hack:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     name: ubuntu / stable / features
     steps:
       - uses: actions/checkout@v3

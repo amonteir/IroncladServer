@@ -1,3 +1,4 @@
+use sqlx::Error as sqlxerror;
 use std::error::Error;
 use std::fmt;
 
@@ -23,3 +24,26 @@ impl fmt::Display for ConfigError {
 }
 
 impl Error for ConfigError {} // ConfigError is of type Error
+
+#[derive(Debug)]
+pub enum PsqlError {
+    SqlxError(sqlxerror),
+    PasswordMismatch,
+}
+
+impl From<sqlxerror> for PsqlError {
+    fn from(err: sqlxerror) -> Self {
+        PsqlError::SqlxError(err)
+    }
+}
+
+impl std::fmt::Display for PsqlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            PsqlError::SqlxError(err) => write!(f, "SQLx error: {}", err),
+            PsqlError::PasswordMismatch => write!(f, "Passwords don't match"),
+        }
+    }
+}
+
+impl Error for PsqlError {}

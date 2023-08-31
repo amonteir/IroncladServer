@@ -53,7 +53,7 @@ jobs:
           components: clippy
       - name: Initialize Database
         env:
-          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d lakers -a -f init.sql
       - name: cargo clippy
         env:

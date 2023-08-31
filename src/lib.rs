@@ -4,7 +4,6 @@ use async_std::prelude::*;
 use async_tls::TlsAcceptor;
 use futures::stream::StreamExt;
 use rustls::{NoClientAuth, ServerConfig};
-use serde_json::json;
 use std::{
     error::Error,
     fmt, fs,
@@ -17,12 +16,12 @@ use std::{
 
 pub mod cli;
 pub mod error;
+pub mod models;
+pub mod psql;
 pub mod route;
 pub mod status;
 use crate::cli::{Config, ServerConfigArguments};
-use crate::route::{
-    route_request, route_request_async, route_request_async1, Route, PATH_TO_404, PATH_TO_HOME,
-};
+use crate::route::{handle_connection_async_tls, route_request, route_request_async};
 
 pub enum ServerConcurrency {
     RunningAsync,
@@ -179,65 +178,6 @@ fn load_private_key(filename: &str) -> std::io::Result<rustls::PrivateKey> {
         return Err(error("expected a single private key".into()));
     }
     Ok(rustls::PrivateKey(keys[0].clone()))
-}
-
-async fn handle_connection_async_tls(
-    mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
-) {
-    let mut buffer = [0; 1024];
-    match stream.read(&mut buffer).await {
-        Ok(bytes_read) => {
-            println!("Read {} bytes", bytes_read);
-
-            let (status_line, route) = route_request_async1(&buffer).await;
-
-            match route {
-                Route::Homepage => {
-                    if let Ok(contents) = fs::read_to_string(*PATH_TO_HOME) {
-                        let response = format!("{}\r\n\r\n{}", status_line, contents);
-                        if let Err(e) = stream.write(response.as_bytes()).await {
-                            eprintln!("Error writing to stream: {}", e);
-                        }
-                    } else {
-                        eprintln!("Error reading file: home.html");
-                    }
-                }
-                Route::BadRequest => {
-                    if let Ok(contents) = fs::read_to_string(*PATH_TO_404) {
-                        let response = format!("{}\r\n\r\n{}", status_line, contents);
-                        if let Err(e) = stream.write(response.as_bytes()).await {
-                            eprintln!("Error writing to stream: {}", e);
-                        }
-                    } else {
-                        eprintln!("Error reading file: 404.html");
-                    }
-                }
-                Route::Login => {
-                    let payload = json!({
-                        "success": true,
-                        "successMessage": "Successfully logged in"
-                    });
-                    let payload_str = payload.to_string();
-                    let headers = format!(
-                        "Content-Type: application/json\r\nContent-Length: {}",
-                        payload_str.as_bytes().len()
-                    );
-
-                    let response = format!("{}\r\n{}\r\n\r\n{}", status_line, headers, payload_str);
-
-                    if let Err(e) = stream.write(response.as_bytes()).await {
-                        eprintln!("Error writing to stream: {}", e);
-                    }
-                }
-            }
-            if let Err(e) = stream.flush().await {
-                eprintln!("Error flushing stream: {}", e);
-            }
-        }
-        Err(e) => {
-            eprintln!("Error reading from stream: {}", e);
-        }
-    }
 }
 
 async fn handle_connection_async(mut stream: async_std::net::TcpStream) {

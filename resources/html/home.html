@@ -25,46 +25,56 @@
     <div id="successMessage" style="display: none;"></div>
 
     <script>
-      document.getElementById('loginForm').addEventListener('submit', async function(event) {
-        event.preventDefault(); // Prevent default form submission
-    
-        const formData = new FormData(event.target);
-        const username = formData.get('username');
-        const password = formData.get('pwd');
-    
-        const payload = {
-            username: username,
-            pwd: password
-        };
-    
-        let response; // Declare response outside of the try block
-    
-        try {
-            response = await fetch(event.target.action, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload),
-            });
-    
-            const data = await response.json();
+   document.getElementById('loginForm').addEventListener('submit', async function(event) {
+    // Prevent default form submission for all cases
+    event.preventDefault();
 
-            if (data.success) {
-                document.getElementById('loginForm').style.display = 'none';
-                document.getElementById('successMessage').textContent = `Successfully logged in user ${username}`;
-                document.getElementById('successMessage').style.display = 'block';
-            } else {
-                alert('Login failed. Please try again.');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            if (response) { // Check if response is defined before trying to read from it
-                const text = await response.text();
-                console.error('Received response:', text);
-            }
+    const formData = new FormData(event.target);
+    const username = formData.get('username');
+    const password = formData.get('pwd');
+
+    const payload = {
+        username: username,
+        pwd: password
+    };
+
+    try {
+        const response = await fetch(event.target.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (response.status === 401) {
+            // If it's a 401, you can show a message or handle it in some other way
+            alert('401 - Unauthorized. Please try again.');
+            return;
         }
-      });
+
+        if (response.status === 500) {
+            // If it's a 500, you can show a message or handle it in some other way
+            alert('500 - Internal Server Error. Please try again later.');
+            return;
+        }        
+
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('successMessage').textContent = `Welcome back ${username}.`;
+            document.getElementById('successMessage').style.display = 'block';
+        } else {
+            alert('Login failed. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+});
+
+
+
     </script>
     
   </body>

@@ -30,7 +30,7 @@ jobs:
         env:
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: lakers
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -54,7 +54,7 @@ jobs:
       - name: Initialize Database
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d lakers -a -f .github/workflows/init.sql
+        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
       - name: cargo clippy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -68,9 +68,9 @@ jobs:
       postgres:
         image: postgres:13
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: lakers
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -83,7 +83,7 @@ jobs:
       - name: Initialize Database
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d lakers -a -f .github/workflows/init.sql
+        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
       - name: cargo doc
         run: cargo doc --no-deps --all-features
         env:

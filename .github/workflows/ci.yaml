@@ -54,7 +54,7 @@ jobs:
       - name: Initialize Database
         env:
           PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -d lakers -a -f init.sql
+        run: psql -h localhost -U postgres -d lakers -a -f .github/workflows/init.sql
       - name: cargo clippy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

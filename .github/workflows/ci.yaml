@@ -11,8 +11,6 @@ permissions:
 jobs:
   fmt:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     name: stable / fmt
     steps:
       - uses: actions/checkout@v3
@@ -21,13 +19,21 @@ jobs:
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt 
       - name: cargo fmt --check
         run: cargo fmt --check
   clippy:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: lakers
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     name: ${{ matrix.toolchain }} / clippy
     permissions:
       contents: read
@@ -45,7 +51,13 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
+      - name: Initialize Database
+        env:
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: psql -h localhost -U postgres -d lakers -a -f init.sql
       - name: cargo clippy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

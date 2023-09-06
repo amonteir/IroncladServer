@@ -123,8 +123,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DB_TEST_ID: ${{ secrets.DB_TEST_ID }}
-          DB_ADMIN_USER_USERNAME: ${{ secrets.DB_ADMIN_USER_USERNAME }}
-          DB_ADMIN_USER_PWD: ${{ secrets.DB_ADMIN_USER_PWD }}
+          DB_TEST_MOCK_USER_USERNAME: ${{ secrets.DB_TEST_MOCK_USER_USERNAME }}
+          DB_TEST_MOCK_USER_PWD: ${{ secrets.DB_TEST_MOCK_USER_PWD }}
           DB_TEST_USER1_USERNAME: ${{ secrets.DB_TEST_USER1_USERNAME }}
           DB_TEST_USER1_PWD: ${{ secrets.DB_TEST_USER1_PWD }}
         run: cargo test --all-features --verbose -- --nocapture

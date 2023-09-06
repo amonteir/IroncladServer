@@ -6,6 +6,4 @@ CREATE TABLE users (
 
 INSERT INTO users (username, pwd) VALUES
 ('mock1', 'password1'),
-('mock2', 'password2'),
-('mock3', 'password3'),
-('admin', 'admin');
+('mock2', 'password2');

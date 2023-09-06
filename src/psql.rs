@@ -86,8 +86,8 @@ mod tests {
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
         let mock_username = env::var("DB_TEST_MOCK_USER_USERNAME")
             .expect("Failed to read test 'mock username' env variable.");
-        let mock_pwd =
-            env::var("DB_TEST_MOCK_USER_PWD").expect("Failed to read test 'mock pwd' env variable.");
+        let mock_pwd = env::var("DB_TEST_MOCK_USER_PWD")
+            .expect("Failed to read test 'mock pwd' env variable.");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await

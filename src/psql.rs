@@ -63,9 +63,9 @@ mod tests {
             .parse()
             .expect("Failed to parse string to u32");
         let test_username = env::var("DB_TEST_USER1_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
+            .expect("Failed to read test 'user1 username' env variable.");
         let test_pwd =
-            env::var("DB_TEST_USER1_PWD").expect("Failed to read test 'pwd' env variable.");
+            env::var("DB_TEST_USER1_PWD").expect("Failed to read test 'user1 pwd' env variable.");
         let test_pool = PgPool::connect(database_url.as_str())
             .await
             .expect("Failed to create psql pool");
@@ -85,9 +85,9 @@ mod tests {
         let database_url =
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
         let admin_username = env::var("DB_ADMIN_USER_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
+            .expect("Failed to read test 'admin username' env variable.");
         let admin_pwd =
-            env::var("DB_ADMIN_USER_PWD").expect("Failed to read test 'pwd' env variable.");
+            env::var("DB_ADMIN_USER_PWD").expect("Failed to read test 'admin pwd' env variable.");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await
@@ -105,9 +105,9 @@ mod tests {
         let database_url =
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
         let dummy_username = env::var("DB_TEST_USER_DOESNT_EXIST_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
+            .expect("Failed to read test 'user doenst exist username' env variable.");
         let dummy_pwd = env::var("DB_TEST_USER_DOESNT_EXIST_PWD")
-            .expect("Failed to read test 'pwd' env variable.");
+            .expect("Failed to read test 'user doesnt exist pwd' env variable.");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await

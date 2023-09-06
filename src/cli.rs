@@ -5,20 +5,22 @@ use std::collections::HashMap;
 pub struct Config {
     pub program: &'static str,
     pub command: ServerCommand,
-    pub args_opts_map: HashMap<ServerConfigArguments, String>,
+    pub args_opts_map: Option<HashMap<ServerConfigArguments, String>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ServerCommand {
     Help,
     Start,
+    Version,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub enum ServerConfigArguments {
     IpAddress,
     Port,
-    ThreadPool,
+    Tls,
+    Verbose,
 }
 
 pub struct HelpMenu {}
@@ -26,24 +28,37 @@ pub struct HelpMenu {}
 impl HelpMenu {
     pub fn show() {
         let help_menu = r#"
-        Usage: boowebserver COMMAND [OPTIONS]
+        Usage: ironcladserver COMMAND [FLAGS] [OPTIONS]
     
         Commands:
-          help          Show this help message and exit
-          start         Start the web server
+          help              Show this help message and exit
+          start             Start the web server
+          version           Show program's version number and exit
           
         Options ('*' means mandatory):
-          -ip           * Input IP address of the web server, e.g. '-ip 127.0.0.1'
-          -p            * Input listening port of the web server, e.g. '-p 8080' 
-          -tp           Input thread pool size, e.g. '-tp 10'
-          -v            Show program's version number and exit
+          -ip               * Input IP address of the web server, e.g. '-ip 127.0.0.1'
+          -p                * Input listening port of the web server, e.g. '-p 8080'
+
+        Flags:
+          --notls           Does not run TLS.
+          --v, --verbose    Outputs a lot more info to the console!  
     
         Usage example:
-          boowebserver start -ip 127.0.0.1 -p 8080 -tp 10
-          boowebserver help
+          ironcladserver start -ip 127.0.0.1 -p 7878
+          ironcladserver start -ip 127.0.0.1 -p 7878 --insecure
+          ironcladserver help
+          ironcladserver version
         "#;
 
         println!("{}", help_menu);
+    }
+}
+
+pub struct Version {}
+
+impl Version {
+    pub fn show() {
+        println!("Version: 0.2.0.");
     }
 }
 
@@ -54,19 +69,20 @@ impl Config {
         }
 
         let mut args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
-        let cli_program_name: &str = "boowebserver";
+        let cli_program_name: &str = "ironcladserver";
 
         let cli_command = match cli_input[1].to_lowercase().as_str() {
             "help" => ServerCommand::Help,
             "start" => ServerCommand::Start,
+            "version" => ServerCommand::Version,
             _ => return Err(ConfigError::UnknownCommand(cli_input[1].to_string())),
         };
 
-        if cli_command == ServerCommand::Help {
+        if cli_command == ServerCommand::Help || cli_command == ServerCommand::Version {
             return Ok(Config {
                 program: cli_program_name,
                 command: cli_command,
-                args_opts_map,
+                args_opts_map: None,
             });
         }
 
@@ -82,7 +98,7 @@ impl Config {
         Ok(Config {
             program: cli_program_name,
             command: cli_command,
-            args_opts_map,
+            args_opts_map: Some(args_opts_map),
         })
     }
 
@@ -120,22 +136,33 @@ impl Config {
                         ));
                     }
                 }
-                "-tp" => {
-                    // concurrency: thread pool
+                "--notls" => {
+                    // tls bool
                     if let std::collections::hash_map::Entry::Vacant(e) =
-                        args_opts_map.entry(ServerConfigArguments::ThreadPool)
+                        args_opts_map.entry(ServerConfigArguments::Tls)
                     {
-                        e.insert(cli_input[index + 1].clone());
-                        index += 1;
+                        e.insert("false".to_string());
                     } else {
                         return Err(ConfigError::ParseError(
-                            "threads pool option '-tp' is allowed once".to_string(),
+                            "flag '-notls' is allowed once".to_string(),
+                        ));
+                    }
+                }
+                "--v" | "--verbose" => {
+                    // verbose
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        args_opts_map.entry(ServerConfigArguments::Verbose)
+                    {
+                        e.insert("true".to_string());
+                    } else {
+                        return Err(ConfigError::ParseError(
+                            "flag '--v' or '--verbose' is allowed once".to_string(),
                         ));
                     }
                 }
                 _ => {
                     return Err(ConfigError::UnknownCommand(
-                        "option not available.".to_string(),
+                        "option or flag not available.".to_string(),
                     ))
                 }
             }
@@ -154,14 +181,12 @@ mod tests {
     fn check_cli_input() {
         let mut config_args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
         let cli_input = vec![
-            "boowebserver".to_string(),
+            "ironcladserver".to_string(),
             "start".to_string(),
             "-ip".to_string(),
             "192.168.0.1".to_string(),
             "-p".to_string(),
-            "443".to_string(),
-            "-tp".to_string(),
-            "10".to_string(),
+            "7878".to_string(),
         ];
 
         match Config::parse_args_opts(&cli_input, &mut config_args_opts_map) {
@@ -174,13 +199,7 @@ mod tests {
                 }
                 if let Some(ip) = config_args_opts_map.get(&ServerConfigArguments::Port) {
                     println!("IP: {}", ip);
-                    assert_eq!(*ip, "443".to_string());
-                } else {
-                    panic!("Fix 'cli_input' vector.")
-                }
-                if let Some(ip) = config_args_opts_map.get(&ServerConfigArguments::ThreadPool) {
-                    println!("IP: {}", ip);
-                    assert_eq!(*ip, "10".to_string());
+                    assert_eq!(*ip, "7878".to_string());
                 } else {
                     panic!("Fix 'cli_input' vector.")
                 }

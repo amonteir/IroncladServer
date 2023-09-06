@@ -53,7 +53,7 @@ mod tests {
     use rand::Rng;
     use std::env;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn psql_create_user() {
         dotenv::dotenv().ok();
         let database_url =
@@ -79,7 +79,7 @@ mod tests {
         assert!(db_psql_create_user(&test_pool, test_user).await.is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn psql_validate_admin_user() {
         dotenv::dotenv().ok();
         let database_url =
@@ -99,7 +99,7 @@ mod tests {
         assert!(db_psql_validate_user(&test_pool, &admin_user).await.is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn psql_validate_user_doesnt_exist() {
         dotenv::dotenv().ok();
         let database_url =

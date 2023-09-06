@@ -34,7 +34,7 @@ impl<'a> User<'a> {
 }
 
 impl<'a> LoginPayload<'a> {
-    pub fn new(username: &'a str, pwd: &'a str) -> Result<LoginPayload<'a>, Box<dyn Error>> {
+    pub fn new(username: &'a str, pwd: &'a str) -> Result<LoginPayload<'a>, Box<dyn Error + Send>> {
         Ok(LoginPayload { username, pwd })
     }
 }

@@ -4,13 +4,14 @@ use crate::error::PsqlError;
 use crate::models::LoginPayload;
 use crate::psql::db_psql_validate_user;
 use crate::status; // Response status codes
-use async_std::prelude::*;
-use async_std::task;
 use once_cell::sync::Lazy;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 use std::path::Path;
-use std::{env, fs, thread, time::Duration};
+use std::{env, fs, time::Duration};
+use tokio::io::Result as IoResult;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::sleep;
 
 pub enum Route {
     Homepage,
@@ -19,33 +20,46 @@ pub enum Route {
     Login,
 }
 
+pub enum TcpStreamType {
+    TokioTls(tokio_rustls::server::TlsStream<tokio::net::TcpStream>), // for TLS
+    TokioNoTls(tokio::net::TcpStream),                                // No TLS
+}
+
+impl TcpStreamType {
+    // Define a helper method to encapsulate the logic of reading
+    pub async fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        match self {
+            TcpStreamType::TokioTls(tls_stream) => tls_stream.read(buf).await,
+            TcpStreamType::TokioNoTls(no_tls_stream) => no_tls_stream.read(buf).await,
+        }
+    }
+    // Write
+    pub async fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        match self {
+            TcpStreamType::TokioTls(tls_stream) => tls_stream.write(buf).await,
+            TcpStreamType::TokioNoTls(no_tls_stream) => no_tls_stream.write(buf).await,
+        }
+    }
+    // Flush
+    pub async fn flush(&mut self) -> IoResult<()> {
+        match self {
+            TcpStreamType::TokioTls(tls_stream) => tls_stream.flush().await,
+            TcpStreamType::TokioNoTls(no_tls_stream) => no_tls_stream.flush().await,
+        }
+    }
+}
+
 // HTML files
 static PATH_TO_HOME: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/home.html"));
 static PATH_TO_404: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/404.html"));
 static PATH_TO_401: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/401.html"));
-static PATH_TO_LOGIN: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/login.html"));
+//static PATH_TO_LOGIN: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/login.html"));
 static PATH_TO_FAVICON: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/favicon.ico"));
 // Requests
 static REQUEST_GET_HOME: &[u8; 16] = b"GET / HTTP/1.1\r\n";
 static REQUEST_GET_SLEEP: &[u8; 21] = b"GET /sleep HTTP/1.1\r\n";
 static REQUEST_POST_LOGIN: &[u8] = b"POST /login";
 static REQUEST_GET_FAVICON: &[u8] = b"GET /favicon.ico HTTP/1.1\r\n";
-
-pub async fn route_request_async(buffer: &[u8]) -> (&'static str, &'static Path) {
-    let (status_line, filename) = if buffer.starts_with(REQUEST_GET_HOME) {
-        (status::STATUS_200, *PATH_TO_HOME)
-    } else if buffer.starts_with(REQUEST_GET_SLEEP) {
-        task::sleep(Duration::from_secs(5)).await;
-        (status::STATUS_200, *PATH_TO_HOME)
-    } else if buffer.starts_with(REQUEST_POST_LOGIN) {
-        (status::STATUS_200, *PATH_TO_LOGIN)
-    } else if buffer.starts_with(REQUEST_GET_FAVICON) {
-        (status::STATUS_200, *PATH_TO_FAVICON)
-    } else {
-        (status::STATUS_404, *PATH_TO_404)
-    };
-    (status_line, filename)
-}
 
 // If adding/removing headers, make sure the last header doesn't terminate in \r\n
 // because that is already being added to the response string in fn 'build_http_response'
@@ -101,15 +115,11 @@ fn build_http_response_login(status: &str) -> String {
     response
 }
 
-async fn process_request_async(
-    stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
-    buffer: &[u8],
-    bytes_read: usize,
-) {
+async fn process_request_async(stream: TcpStreamType, buffer: &[u8], bytes_read: usize) {
     let mut route: Route = if buffer.starts_with(REQUEST_GET_HOME) {
         Route::Homepage
     } else if buffer.starts_with(REQUEST_GET_SLEEP) {
-        task::sleep(Duration::from_secs(5)).await;
+        sleep(Duration::from_secs(5)).await;
         Route::Homepage
     } else if buffer.starts_with(REQUEST_POST_LOGIN) {
         Route::Login
@@ -125,7 +135,7 @@ async fn process_request_async(
     let http_request_split: Vec<&str> = http_request.split("\r\n\r\n").collect();
 
     if http_request_split.len() < 2 {
-        eprintln!("Invalid HTTP request format");
+        eprintln!("Invalid HTTP request format.");
         route = Route::BadRequest;
     }
 
@@ -149,7 +159,6 @@ async fn process_request_async(
             }
         }
         Route::Favicon => {
-            println!("favicon");
             if let Ok(contents) = fs::read(*PATH_TO_FAVICON) {
                 let response = build_http_response(status::STATUS_200, contents, "image/x-icon");
                 write_to_client(stream, response).await;
@@ -237,10 +246,7 @@ async fn process_request_async(
     }
 }
 
-async fn write_to_client(
-    mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
-    response: String,
-) {
+async fn write_to_client(mut stream: TcpStreamType, response: String) {
     if let Err(e) = stream.write(response.as_bytes()).await {
         eprintln!("Error writing to stream: {}", e);
     }
@@ -249,29 +255,31 @@ async fn write_to_client(
     }
 }
 
-pub fn route_request(buffer: &[u8]) -> (&str, &'static Path) {
-    let (status_line, filename) = if buffer.starts_with(REQUEST_GET_HOME) {
-        (status::STATUS_200, *PATH_TO_HOME)
-    } else if buffer.starts_with(REQUEST_GET_SLEEP) {
-        thread::sleep(Duration::from_secs(5));
-        (status::STATUS_200, *PATH_TO_HOME)
-    } else if buffer.starts_with(REQUEST_POST_LOGIN) {
-        (status::STATUS_200, *PATH_TO_LOGIN)
-    } else {
-        (status::STATUS_404, *PATH_TO_404)
-    };
-
-    (status_line, filename)
-}
-
-pub async fn handle_connection_async_tls(
-    mut stream: async_tls::server::TlsStream<async_std::net::TcpStream>,
-) {
+pub async fn handle_connection_async(mut stream: TcpStreamType) {
     let mut buffer = [0; 1024];
-
     match stream.read(&mut buffer).await {
         Ok(bytes_read) => {
+            if bytes_read == 0 {
+                println!("Connection closed");
+                return;
+            }
             //println!("Read {} bytes", bytes_read);
+            //println!("Received bytes: {:?}", &buffer[0..bytes_read]);
+            let request_data =
+                std::str::from_utf8(&buffer[0..bytes_read]).unwrap_or("<Invalid UTF-8>");
+            println!("Received request: \r\n{}", request_data);
+            // match std::str::from_utf8(&buffer[0..bytes_read]) {
+            //     Ok(request_data) => {
+            //         println!("Received request: \r\n{}", request_data);
+            //     }
+            //     Err(_) => {
+            //         // let hex_representation: Vec<String> = buffer.iter()
+            //         //     .map(|b| format!("{:02x}", b))
+            //         //     .collect();
+            //         // println!("Received request (hex): \r\n{}", hex_representation.join(" "));
+            //     }
+
+            // }
             process_request_async(stream, &buffer, bytes_read).await;
         }
         Err(e) => {

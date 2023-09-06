@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [stable]
+        toolchain: [stable, beta, nightly]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -89,3 +89,42 @@ jobs:
         env:
           RUSTDOCFLAGS: --cfg docsrs
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  test:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.toolchain }} / test
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Install ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustc, cargo, rust-std, rust-docs
+      - name: Initialize Database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
+      - name: Run Tests
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_TEST_ID: ${{ secrets.DB_TEST_ID }}
+          DB_TEST_MOCK_USER_USERNAME: ${{ secrets.DB_TEST_MOCK_USER_USERNAME }}
+          DB_TEST_MOCK_USER_PWD: ${{ secrets.DB_TEST_MOCK_USER_PWD }}
+          DB_TEST_USER1_USERNAME: ${{ secrets.DB_TEST_USER1_USERNAME }}
+          DB_TEST_USER1_PWD: ${{ secrets.DB_TEST_USER1_PWD }}
+        run: cargo test --all-features --verbose -- --nocapture

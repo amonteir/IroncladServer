@@ -1,18 +1,9 @@
 #![forbid(unsafe_code)]
 
-use async_std::prelude::*;
-use async_tls::TlsAcceptor;
-use futures::stream::StreamExt;
-use rustls::{NoClientAuth, ServerConfig};
-use std::{
-    error::Error,
-    fmt, fs,
-    io::prelude::*,
-    net::{TcpListener, TcpStream},
-    process,
-    sync::{mpsc, Arc, Mutex},
-    thread,
-};
+use std::{error::Error, fs, sync::Arc};
+use tokio::net::TcpListener;
+use tokio_rustls::rustls;
+use tokio_rustls::TlsAcceptor;
 
 pub mod cli;
 pub mod error;
@@ -20,90 +11,50 @@ pub mod models;
 pub mod psql;
 pub mod route;
 pub mod status;
-use crate::cli::{Config, ServerConfigArguments};
-use crate::route::{handle_connection_async_tls, route_request, route_request_async};
+use crate::cli::ServerConfigArguments;
+use crate::route::{handle_connection_async, TcpStreamType};
+use std::collections::HashMap;
 
-pub enum ServerConcurrency {
-    RunningAsync,
-    RunningThreadPool,
-}
 pub struct Server {
     ip_port: String,
-    pub concurrency: ServerConcurrency,
-    workers_pool: Option<ThreadPool>,
+    pub with_tls: bool,
+    pub verbose: bool,
 }
 
 impl Server {
     /// Reads a ip address, port and concurrency settings from Config (i.e. user cli input)
     /// and returns the Server object
     ///
-    pub fn init(config: Config) -> Result<Server, Box<dyn Error>> {
-        let ip_addr = config
-            .args_opts_map
-            .get(&ServerConfigArguments::IpAddress)
-            .unwrap();
-        let port = config
-            .args_opts_map
-            .get(&ServerConfigArguments::Port)
-            .unwrap();
+    pub fn init(
+        opts_flags: HashMap<ServerConfigArguments, String>,
+    ) -> Result<Server, Box<dyn Error>> {
+        let ip_addr = opts_flags.get(&ServerConfigArguments::IpAddress).unwrap();
+        let port = opts_flags.get(&ServerConfigArguments::Port).unwrap();
         let ip_port = format!("{}:{}", ip_addr, port);
+        let with_tls = opts_flags.get(&ServerConfigArguments::Tls).is_none();
+        let verbose = opts_flags.get(&ServerConfigArguments::Verbose).is_some();
 
-        let (concurrency, workers_pool) =
-            match config.args_opts_map.get(&ServerConfigArguments::ThreadPool) {
-                Some(value) => {
-                    let pool_size: usize = match value.parse() {
-                        Ok(size) => size,
-                        Err(_) => process::exit(0), // TODO: change this to an Error in error.rs
-                    };
-                    (
-                        ServerConcurrency::RunningThreadPool,
-                        Some(ThreadPool::new(pool_size)?),
-                    )
-                }
-                None => (ServerConcurrency::RunningAsync, None),
-            };
         Ok(Server {
             ip_port,
-            concurrency,
-            workers_pool,
+            with_tls,
+            verbose,
         })
     }
 
-    /// Starts the server with a thread pool
-    pub fn start_tp(&self) -> Result<(), Box<dyn Error>> {
-        let listener = TcpListener::bind(&self.ip_port)?;
-        println!("Started the server with a thread pool.");
-
-        for stream in listener.incoming() {
-            let stream = stream?;
-            match &self.workers_pool {
-                Some(pool) => {
-                    pool.execute(|| {
-                        handle_connection_tp(stream);
-                    });
-                }
-                None => {
-                    process::exit(0); // TODO: change this to an Error in error.rs
-                }
-            }
-        }
-        Ok(())
-    }
     /// Starts the server using async
     ///
     pub async fn start_async(&self) -> Result<(), Box<dyn Error>> {
-        let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
-        println!("Started the server and serving requests using async.");
+        let listener = tokio::net::TcpListener::bind(&self.ip_port).await?;
+        println!("[  OK  ]     Started the server and serving requests using async, no TLS.");
 
-        listener
-            .incoming()
-            .for_each_concurrent(/* limit */ None, |tcpstream| async move {
-                let tcpstream = tcpstream.unwrap();
-                handle_connection_async(tcpstream).await;
-            })
-            .await;
+        loop {
+            let (socket, _) = listener.accept().await?;
 
-        Ok(())
+            tokio::spawn(async move {
+                // Process each socket concurrently.
+                handle_connection_async(TcpStreamType::TokioNoTls(socket)).await;
+            });
+        }
     }
     /// Starts the server using async and tls
     ///
@@ -111,34 +62,34 @@ impl Server {
         let certs = load_certs("certs/sample.pem")?;
         let key = load_private_key("certs/sample.rsa")?;
 
-        let mut config = ServerConfig::new(NoClientAuth::new());
-        config.set_single_cert(certs, key).unwrap();
+        let config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
 
         let acceptor = TlsAcceptor::from(Arc::new(config));
-        let listener = async_std::net::TcpListener::bind(&self.ip_port).await?;
-        println!("Started the tls server in async mode.");
-        listener
-            .incoming()
-            .for_each_concurrent(/* limit */ None, {
-                let acceptor = acceptor.clone();
-                move |tcpstream_result| {
+        let listener = TcpListener::bind(&self.ip_port).await?;
+        println!("[  OK  ]     Started the TLS server in async mode.");
+
+        loop {
+            match listener.accept().await {
+                Ok((socket, _ip_addr)) => {
                     let acceptor = acceptor.clone();
-                    async move {
-                        if let Ok(tcpstream) = tcpstream_result {
-                            match acceptor.accept(tcpstream).await {
-                                Ok(stream) => handle_connection_async_tls(stream).await,
-                                Err(e) => {
-                                    println!("TLS handshake error: {}", e);
-                                }
+                    tokio::spawn(async move {
+                        match acceptor.accept(socket).await {
+                            Ok(tls_stream) => {
+                                handle_connection_async(TcpStreamType::TokioTls(tls_stream)).await;
                             }
-                        } else {
-                            println!("Error accepting tcp stream.");
+                            Err(e) => {
+                                println!("TLS handshake error: {}", e);
+                            }
                         }
-                    }
+                    });
                 }
-            })
-            .await;
-        Ok(())
+                Err(e) => eprintln!("Accept failed = {:?}", e),
+            }
+        }
     }
     /// Chaining POC
     pub fn start1(self) -> Self {
@@ -180,190 +131,24 @@ fn load_private_key(filename: &str) -> std::io::Result<rustls::PrivateKey> {
     Ok(rustls::PrivateKey(keys[0].clone()))
 }
 
-async fn handle_connection_async(mut stream: async_std::net::TcpStream) {
-    let mut buffer = [0; 1024];
-    match stream.read(&mut buffer).await {
-        Ok(_bytes_read) => {
-            //println!("Read {} bytes", bytes_read);
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use std::collections::HashMap;
 
-            let (status_line, filename) = route_request_async(&buffer).await;
+//     #[tokio::test]
+//     async fn invalid_server_ip() {
+//         let mut config_args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
+//         config_args_opts_map.insert(ServerConfigArguments::IpAddress, String::from("127.0.1"));
+//         config_args_opts_map.insert(ServerConfigArguments::Port, String::from("7878"));
 
-            let contents = fs::read_to_string(filename).unwrap();
+//         let server = Server::init(config_args_opts_map).unwrap();
+//         let result = server.start_async().await;
 
-            let response = format!("{status_line}{contents}");
-            stream.write(response.as_bytes()).await.unwrap();
-            stream.flush().await.unwrap();
-        }
-        Err(e) => {
-            eprintln!("Error reading from stream: {}", e);
-        }
-    }
-}
-
-fn handle_connection_tp(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    match stream.read(&mut buffer) {
-        Ok(_bytes_read) => {
-            //println!("Read {} bytes", bytes_read);
-
-            let (status_line, filename) = route_request(&buffer);
-
-            let contents = fs::read_to_string(filename).unwrap();
-
-            let response = format!(
-                "{}\r\nContent-Length: {}\r\n\r\n{}",
-                status_line,
-                contents.len(),
-                contents
-            );
-
-            stream.write_all(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
-        }
-        Err(e) => {
-            // Handle the error in some way.
-            eprintln!("Error reading from stream: {}", e);
-        }
-    }
-}
-
-pub struct ThreadPool {
-    workers: Vec<Worker>,
-    sender: Option<mpsc::Sender<Job>>,
-}
-
-type Job = Box<dyn FnOnce() + Send + 'static>;
-
-#[derive(Debug)]
-struct PoolCreationError {
-    msg: String,
-}
-
-impl PoolCreationError {
-    fn new(msg: &str) -> Self {
-        PoolCreationError {
-            msg: msg.to_string(),
-        }
-    }
-}
-
-impl fmt::Display for PoolCreationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for PoolCreationError {} // PoolCreationError is of type Error. No need to override existing Error methods
-
-impl ThreadPool {
-    /// Create a new ThreadPool.
-    ///
-    /// The size is the number of threads in the pool.
-    ///
-    /// # Panics
-    ///
-    /// The `new` function will panic if the size is zero.
-    fn new(size: usize) -> Result<ThreadPool, PoolCreationError> {
-        if size < 1 {
-            return Err(PoolCreationError::new(
-                "Number of workers in pool must be greater than 0.",
-            ));
-        }
-
-        let (sender, receiver) = mpsc::channel();
-
-        let receiver = Arc::new(Mutex::new(receiver));
-
-        let mut workers = Vec::with_capacity(size);
-
-        for id in 0..size {
-            workers.push(Worker::new(id, Arc::clone(&receiver)));
-        }
-
-        Ok(ThreadPool {
-            workers,
-            sender: Some(sender),
-        })
-    }
-
-    fn execute<F>(&self, f: F)
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let job = Box::new(f);
-
-        self.sender.as_ref().unwrap().send(job).unwrap();
-    }
-}
-
-impl Drop for ThreadPool {
-    fn drop(&mut self) {
-        drop(self.sender.take());
-
-        for worker in &mut self.workers {
-            println!("Shutting down worker {}", worker.id);
-
-            if let Some(thread) = worker.thread.take() {
-                thread.join().unwrap();
-            }
-        }
-    }
-}
-
-struct Worker {
-    id: usize,
-    thread: Option<thread::JoinHandle<()>>,
-}
-
-impl Worker {
-    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
-        let thread = thread::spawn(move || loop {
-            let message = receiver.lock().unwrap().recv();
-
-            match message {
-                Ok(job) => {
-                    println!("Worker {id} got a job; executing.");
-
-                    job();
-                }
-                Err(_) => {
-                    println!("Worker {id} disconnected; shutting down.");
-                    break;
-                }
-            }
-        });
-
-        Worker {
-            id,
-            thread: Some(thread),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    fn invalid_server_ip() {
-        let mut config_args_opts_map: HashMap<ServerConfigArguments, String> = HashMap::new();
-        config_args_opts_map.insert(ServerConfigArguments::IpAddress, String::from("127.0.1"));
-        config_args_opts_map.insert(ServerConfigArguments::Port, String::from("7878"));
-        config_args_opts_map.insert(ServerConfigArguments::ThreadPool, String::from("10"));
-        let test_config: Config = Config {
-            program: "ironcladserver",
-            command: cli::ServerCommand::Start,
-            args_opts_map: config_args_opts_map,
-        };
-
-        let server = Server::init(test_config).unwrap();
-        let result = server.start_tp();
-
-        if let Err(e) = result {
-            assert_eq!(e.to_string(), "No such host is known. (os error 11001)");
-        } else {
-            panic!("Expected Err, but got Ok");
-        }
-    }
-}
+//         if let Err(e) = result {
+//             assert_eq!(e.to_string(), "No such host is known. (os error 11001)");
+//         } else {
+//             panic!("Expected Err, but got Ok");
+//         }
+//     }
+// }

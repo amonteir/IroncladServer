@@ -53,7 +53,7 @@ mod tests {
     use rand::Rng;
     use std::env;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn psql_create_user() {
         dotenv::dotenv().ok();
         let database_url =
@@ -63,9 +63,9 @@ mod tests {
             .parse()
             .expect("Failed to parse string to u32");
         let test_username = env::var("DB_TEST_USER1_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
+            .expect("Failed to read test 'user1 username' env variable.");
         let test_pwd =
-            env::var("DB_TEST_USER1_PWD").expect("Failed to read test 'pwd' env variable.");
+            env::var("DB_TEST_USER1_PWD").expect("Failed to read test 'user1 pwd' env variable.");
         let test_pool = PgPool::connect(database_url.as_str())
             .await
             .expect("Failed to create psql pool");
@@ -74,47 +74,45 @@ mod tests {
         test_id += random_addition;
 
         let test_user = User::new(Some(test_id), test_username.as_str(), test_pwd.as_str())
-            .expect("Failed to create new user");
+            .expect("Failed to create new user instance");
 
         assert!(db_psql_create_user(&test_pool, test_user).await.is_ok());
     }
 
-    #[async_std::test]
-    async fn psql_validate_admin_user() {
+    #[tokio::test]
+    async fn psql_validate_mock_user() {
         dotenv::dotenv().ok();
         let database_url =
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
-        let admin_username = env::var("DB_ADMIN_USER_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
-        let admin_pwd =
-            env::var("DB_ADMIN_USER_PWD").expect("Failed to read test 'pwd' env variable.");
+        let mock_username = env::var("DB_TEST_MOCK_USER_USERNAME")
+            .expect("Failed to read test 'mock username' env variable.");
+        let mock_pwd = env::var("DB_TEST_MOCK_USER_PWD")
+            .expect("Failed to read test 'mock pwd' env variable.");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await
             .expect("Failed to create psql pool");
 
-        let admin_user = LoginPayload::new(admin_username.as_str(), admin_pwd.as_str())
-            .expect("Failed to create new user");
+        let mock_user = LoginPayload::new(mock_username.as_str(), mock_pwd.as_str())
+            .expect("Failed to create new 'mock' user instance");
 
-        assert!(db_psql_validate_user(&test_pool, &admin_user).await.is_ok());
+        assert!(db_psql_validate_user(&test_pool, &mock_user).await.is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn psql_validate_user_doesnt_exist() {
         dotenv::dotenv().ok();
         let database_url =
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
-        let dummy_username = env::var("DB_TEST_USER_DOESNT_EXIST_USERNAME")
-            .expect("Failed to read test 'username' env variable.");
-        let dummy_pwd = env::var("DB_TEST_USER_DOESNT_EXIST_PWD")
-            .expect("Failed to read test 'pwd' env variable.");
+        let dummy_username = String::from("dummmmmy");
+        let dummy_pwd = String::from("dummmmmy");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await
             .expect("Failed to create psql pool");
 
         let dummy_user = LoginPayload::new(dummy_username.as_str(), dummy_pwd.as_str())
-            .expect("Failed to create new user");
+            .expect("Failed to create new 'dummy' user instance");
 
         assert!(db_psql_validate_user(&test_pool, &dummy_user)
             .await

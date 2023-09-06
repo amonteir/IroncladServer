@@ -74,7 +74,7 @@ mod tests {
         test_id += random_addition;
 
         let test_user = User::new(Some(test_id), test_username.as_str(), test_pwd.as_str())
-            .expect("Failed to create new user");
+            .expect("Failed to create new user instance");
 
         assert!(db_psql_create_user(&test_pool, test_user).await.is_ok());
     }
@@ -94,7 +94,7 @@ mod tests {
             .expect("Failed to create psql pool");
 
         let admin_user = LoginPayload::new(admin_username.as_str(), admin_pwd.as_str())
-            .expect("Failed to create new user");
+            .expect("Failed to create new 'admin' user instance");
 
         assert!(db_psql_validate_user(&test_pool, &admin_user).await.is_ok());
     }
@@ -104,17 +104,15 @@ mod tests {
         dotenv::dotenv().ok();
         let database_url =
             env::var("DATABASE_URL").expect("Failed to read test 'database_url' env variable.");
-        let dummy_username = env::var("DB_TEST_USER_DOESNT_EXIST_USERNAME")
-            .expect("Failed to read test 'user doenst exist username' env variable.");
-        let dummy_pwd = env::var("DB_TEST_USER_DOESNT_EXIST_PWD")
-            .expect("Failed to read test 'user doesnt exist pwd' env variable.");
+        let dummy_username = String::from("dummmmmy");
+        let dummy_pwd = String::from("dummmmmy");
 
         let test_pool = PgPool::connect(database_url.as_str())
             .await
             .expect("Failed to create psql pool");
 
         let dummy_user = LoginPayload::new(dummy_username.as_str(), dummy_pwd.as_str())
-            .expect("Failed to create new user");
+            .expect("Failed to create new 'dummy' user instance");
 
         assert!(db_psql_validate_user(&test_pool, &dummy_user)
             .await

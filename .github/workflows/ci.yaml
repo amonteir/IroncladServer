@@ -90,36 +90,36 @@ jobs:
           RUSTDOCFLAGS: --cfg docsrs
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
   test:
-  runs-on: ubuntu-latest
-  name: ${{ matrix.toolchain }} / test
-  services:
-    postgres:
-      image: postgres:13
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-      ports:
-        - 5432:5432
-      options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-  strategy:
-    fail-fast: false
-    matrix:
-      toolchain: [stable, beta, nightly]
-  steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: true
-    - name: Install ${{ matrix.toolchain }}
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.toolchain }}
-        components: rustc, cargo, rust-std, rust-docs
-    - name: Initialize Database
-      env:
-        PGPASSWORD: postgres
-      run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
-    - name: Run Tests
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      run: cargo test --all-features --verbose -- --nocapture
+    runs-on: ubuntu-latest
+    name: ${{ matrix.toolchain }} / test
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, beta, nightly]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Install ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustc, cargo, rust-std, rust-docs
+      - name: Initialize Database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
+      - name: Run Tests
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: cargo test --all-features --verbose -- --nocapture

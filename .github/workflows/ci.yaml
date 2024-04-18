@@ -73,7 +73,7 @@ jobs:
           components: clippy
       - name: Initialize Database
         env:
-          PGPASSWORD: postgres
+          PGPASSWORD: Cisco123
         run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
       - name: cargo clippy
         env:
@@ -112,7 +112,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
       - name: Initialize Database
         env:
-          PGPASSWORD: postgres
+          PGPASSWORD: Cisco123
         run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
       - name: cargo doc
         run: cargo doc --no-deps --all-features
@@ -157,7 +157,7 @@ jobs:
           components: rustc, cargo, rust-std, rust-docs
       - name: Initialize Database
         env:
-          PGPASSWORD: postgres
+          PGPASSWORD: Cisco123
         run: psql -h localhost -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -a -f .github/workflows/init.sql
       - name: Run Tests
         env:

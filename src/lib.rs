@@ -52,7 +52,7 @@ impl Server {
 
             tokio::spawn(async move {
                 // Process each socket concurrently.
-                handle_connection_async(TcpStreamType::TokioNoTls(socket)).await;
+                handle_connection_async(&mut TcpStreamType::TokioNoTls(socket)).await;
             });
         }
     }
@@ -79,7 +79,8 @@ impl Server {
                     tokio::spawn(async move {
                         match acceptor.accept(socket).await {
                             Ok(tls_stream) => {
-                                handle_connection_async(TcpStreamType::TokioTls(tls_stream)).await;
+                                handle_connection_async(&mut TcpStreamType::TokioTls(tls_stream))
+                                    .await;
                             }
                             Err(e) => {
                                 println!("TLS handshake error: {}", e);
@@ -91,16 +92,12 @@ impl Server {
             }
         }
     }
-    /// Chaining POC
-    pub fn start1(self) -> Self {
-        println!("ttttest");
-        self
-    }
 }
 
 fn error(err: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, err)
 }
+
 
 // Load public certificate from file.
 fn load_certs(filename: &str) -> std::io::Result<Vec<rustls::Certificate>> {

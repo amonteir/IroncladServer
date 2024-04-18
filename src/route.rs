@@ -1,17 +1,17 @@
 #![forbid(unsafe_code)]
 
-use crate::error::PsqlError;
 use crate::models::LoginPayload;
 use crate::psql::db_psql_validate_user;
 use crate::status; // Response status codes
+use futures_util::{SinkExt, StreamExt};
 use once_cell::sync::Lazy;
-use serde_json::json;
 use sqlx::postgres::PgPool;
+use std::{env, fs};
 use std::path::Path;
-use std::{env, fs, time::Duration};
+use std::time::Duration;
 use tokio::io::Result as IoResult;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::time::sleep;
+use tokio::time;
 
 pub enum Route {
     Homepage,
@@ -52,14 +52,11 @@ impl TcpStreamType {
 // HTML files
 static PATH_TO_HOME: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/home.html"));
 static PATH_TO_404: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/404.html"));
-static PATH_TO_401: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/401.html"));
-//static PATH_TO_LOGIN: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/login.html"));
 static PATH_TO_FAVICON: Lazy<&Path> = Lazy::new(|| Path::new("resources/html/favicon.ico"));
 // Requests
 static REQUEST_GET_HOME: &[u8; 16] = b"GET / HTTP/1.1\r\n";
-static REQUEST_GET_SLEEP: &[u8; 21] = b"GET /sleep HTTP/1.1\r\n";
-static REQUEST_POST_LOGIN: &[u8] = b"POST /login";
-static REQUEST_GET_FAVICON: &[u8] = b"GET /favicon.ico HTTP/1.1\r\n";
+static REQUEST_GET_FAVICON: &[u8; 27] = b"GET /favicon.ico HTTP/1.1\r\n";
+static REQUEST_POST_LOGIN: &[u8; 22] = b"POST /login HTTP/1.1\r\n";
 
 // If adding/removing headers, make sure the last header doesn't terminate in \r\n
 // because that is already being added to the response string in fn 'build_http_response'
@@ -91,7 +88,7 @@ fn build_http_headers(security_enabled: bool, payload_length: usize, content_typ
 
 fn build_http_response<T: AsRef<[u8]>>(status: &str, payload: T, content_type: &str) -> String {
     let payload_bytes = payload.as_ref();
-    let headers = build_http_headers(false, payload_bytes.len(), content_type);
+    let headers = build_http_headers(true, payload_bytes.len(), content_type);
     let response_payload = match payload_bytes {
         // If it's a UTF-8 string, format it as is.
         // This will work for String and &str types.
@@ -105,26 +102,32 @@ fn build_http_response<T: AsRef<[u8]>>(status: &str, payload: T, content_type: &
     format!("{}\r\n{}\r\n\r\n{}", status, headers, response_payload)
 }
 
-fn build_http_response_login(status: &str) -> String {
-    let payload = json!({
-        "success": true
-    });
-    let payload_str = payload.to_string();
-    let headers = build_http_headers(false, payload_str.as_bytes().len(), "application/json");
-    let response = format!("{}\r\n{}\r\n\r\n{}", status, headers, payload_str);
-    response
+async fn write_404_to_http_client(stream: &mut TcpStreamType) {
+    if let Ok(contents) = fs::read_to_string(*PATH_TO_404) {
+        let response =
+            build_http_response(status::STATUS_404, contents, "text/html; charset=UTF-8");
+        write_to_http_client(stream, response).await;
+    } else {
+        eprintln!("Error reading file: 404.html");
+    }
 }
 
-async fn process_request_async(stream: TcpStreamType, buffer: &[u8], bytes_read: usize) {
+async fn write_to_http_client(stream: &mut TcpStreamType, response: String) {
+    if let Err(e) = stream.write(response.as_bytes()).await {
+        eprintln!("Error writing to stream: {}", e);
+    }
+    if let Err(e) = stream.flush().await {
+        eprintln!("Error flushing stream: {}", e);
+    }
+}
+
+async fn process_request_async(stream: &mut TcpStreamType, buffer: &[u8], bytes_read: usize) {
     let mut route: Route = if buffer.starts_with(REQUEST_GET_HOME) {
         Route::Homepage
-    } else if buffer.starts_with(REQUEST_GET_SLEEP) {
-        sleep(Duration::from_secs(5)).await;
-        Route::Homepage
-    } else if buffer.starts_with(REQUEST_POST_LOGIN) {
-        Route::Login
     } else if buffer.starts_with(REQUEST_GET_FAVICON) {
         Route::Favicon
+    } else if buffer.starts_with(REQUEST_POST_LOGIN) {
+        Route::Login
     } else {
         Route::BadRequest
     };
@@ -141,19 +144,13 @@ async fn process_request_async(stream: TcpStreamType, buffer: &[u8], bytes_read:
 
     match route {
         Route::BadRequest => {
-            if let Ok(contents) = fs::read_to_string(*PATH_TO_404) {
-                let response =
-                    build_http_response(status::STATUS_404, contents, "text/html; charset=UTF-8");
-                write_to_client(stream, response).await;
-            } else {
-                eprintln!("Error reading file: 404.html");
-            }
+            write_404_to_http_client(stream).await;
         }
         Route::Homepage => {
             if let Ok(contents) = fs::read_to_string(*PATH_TO_HOME) {
                 let response =
                     build_http_response(status::STATUS_200, contents, "text/html; charset=UTF-8");
-                write_to_client(stream, response).await;
+                write_to_http_client(stream, response).await;
             } else {
                 eprintln!("Error reading file: home.html");
             }
@@ -161,7 +158,7 @@ async fn process_request_async(stream: TcpStreamType, buffer: &[u8], bytes_read:
         Route::Favicon => {
             if let Ok(contents) = fs::read(*PATH_TO_FAVICON) {
                 let response = build_http_response(status::STATUS_200, contents, "image/x-icon");
-                write_to_client(stream, response).await;
+                write_to_http_client(stream, response).await;
             } else {
                 eprintln!("Error reading file: favicon.ico");
             }
@@ -246,16 +243,7 @@ async fn process_request_async(stream: TcpStreamType, buffer: &[u8], bytes_read:
     }
 }
 
-async fn write_to_client(mut stream: TcpStreamType, response: String) {
-    if let Err(e) = stream.write(response.as_bytes()).await {
-        eprintln!("Error writing to stream: {}", e);
-    }
-    if let Err(e) = stream.flush().await {
-        eprintln!("Error flushing stream: {}", e);
-    }
-}
-
-pub async fn handle_connection_async(mut stream: TcpStreamType) {
+pub async fn handle_connection_async(stream: &mut TcpStreamType) {
     let mut buffer = [0; 1024];
     match stream.read(&mut buffer).await {
         Ok(bytes_read) => {
@@ -263,23 +251,10 @@ pub async fn handle_connection_async(mut stream: TcpStreamType) {
                 println!("Connection closed");
                 return;
             }
-            //println!("Read {} bytes", bytes_read);
-            //println!("Received bytes: {:?}", &buffer[0..bytes_read]);
             let request_data =
                 std::str::from_utf8(&buffer[0..bytes_read]).unwrap_or("<Invalid UTF-8>");
             println!("Received request: \r\n{}", request_data);
-            // match std::str::from_utf8(&buffer[0..bytes_read]) {
-            //     Ok(request_data) => {
-            //         println!("Received request: \r\n{}", request_data);
-            //     }
-            //     Err(_) => {
-            //         // let hex_representation: Vec<String> = buffer.iter()
-            //         //     .map(|b| format!("{:02x}", b))
-            //         //     .collect();
-            //         // println!("Received request (hex): \r\n{}", hex_representation.join(" "));
-            //     }
 
-            // }
             process_request_async(stream, &buffer, bytes_read).await;
         }
         Err(e) => {

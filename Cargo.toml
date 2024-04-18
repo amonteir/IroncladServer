@@ -14,6 +14,9 @@ rustls-pemfile = "1.0.3"
 once_cell = "1.18.0"
 serde = "1.0.183"
 serde_json = "1.0.104"
-sqlx = { version = "0.7", features = [ "runtime-async-std", "postgres", "json" ] }
+sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "json", "macros", "chrono" ] }
 dotenv = "0.15.0"
 rand = "0.8.5"
+chrono = { version = "0.4.31", features = ["serde"] }
+futures-util = { version = "0.3.28", default-features = false, features = ["sink", "std"] }
+url = "2.3.1"
